@@ -67,22 +67,23 @@ This project provides a Flask-based backend that checks the communication betwee
 - `FLASK_ENV`: Set to `development` for development mode.
 
 ## Project Structure
+```
 project_diggy/
 │
-├── backend/
-│ ├── app.py
-│ ├── requirements.txt
-│ └── Dockerfile
+├── backend/               # Backend (Python/Flask)
+│   ├── app.py             # Main application file
+│   ├── requirements.txt   # Python dependencies
+│   └── Dockerfile         # Docker configuration for backend
 │
-└── frontend/
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── public/
-│   └── src/
-│  ├── Dockerfile
-│  ├── dist/
-│  ├── node_modules/
-
+└── frontend/               # Frontend (React)
+    ├── package.json        # Node.js dependencies
+    ├── package-lock.json   # Lockfile for Node.js dependencies
+    ├── public/             # Static files (e.g., index.html)
+    └── src/                # Source code of the React application
+    ├── Dockerfile          # Docker configuration for frontend
+    ├── dist/               # Build output directory
+    └── node_modules/       # Node.js modules (installed by npm)
+```
 #### Usage
 1. Upload Excel file via the /upload endpoint.
 2. The backend processes the file and checks connectivity.
