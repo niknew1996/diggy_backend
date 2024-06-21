@@ -1,11 +1,12 @@
-FROM python:3.9-slim
+# backend/Dockerfile
+
+FROM python:3.8-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-COPY backend.py .
-
-CMD ["python", "backend.py"]
+CMD ["python", "app.py"]
