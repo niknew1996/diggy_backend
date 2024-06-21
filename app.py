@@ -1,9 +1,15 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import openpyxl
 import asyncio
 import paramiko
-import openpyxl
 from telnetlib3 import open_connection
-from aiohttp import web
+import os
 
+app = Flask(__name__)
+CORS(app)
+
+# Function to handle Telnet
 async def test_telnet(telnet_host, telnet_port, timeout=5):
     try:
         reader, writer = await asyncio.wait_for(open_connection(telnet_host, port=telnet_port), timeout=timeout)
@@ -13,13 +19,24 @@ async def test_telnet(telnet_host, telnet_port, timeout=5):
     except (asyncio.TimeoutError, Exception):
         return "Failed"
 
-async def process_excel(file_name, ssh_port, ssh_user, ssh_password):
-    wb = openpyxl.load_workbook(file_name)
+@app.route('/process', methods=['POST'])
+def process():
+    file = request.files['file']
+    ssh_user = request.form['ssh_user']
+    ssh_password = request.form['ssh_password']
+
+    # Save the file to a temporary location
+    temp_dir = "/tmp"
+    file_path = os.path.join(temp_dir, file.filename)
+    file.save(file_path)
+
+    wb = openpyxl.load_workbook(file_path)
     ws = wb.active
 
-    for row in ws.iter_rows(min_row=2):  # Skip Header Row
+    for row in ws.iter_rows(min_row=2):
         if all(cell.value is None for cell in row):
-            continue
+            print("Row is Null stop it")
+            break
 
         source_start, source_end, dest_start, dest_end = row[1].value, row[2].value, row[4].value, row[5].value
         try:
@@ -28,23 +45,28 @@ async def process_excel(file_name, ssh_port, ssh_user, ssh_password):
             row[10].value = "Invalid Port"
             continue
 
-        ssh_user, ssh_password = row[12].value, row[13].value
+        ssh_port = 22
 
         all_success = True
         for source_ip in range(int(source_start.split('.')[-1]), int(source_end.split('.')[-1]) + 1):
             source_ip_full = source_start.rsplit('.', 1)[0] + '.' + str(source_ip)
+
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             try:
                 ssh_client.connect(source_ip_full, port=ssh_port, username=ssh_user, password=ssh_password)
+                print(f"SSH connection to {source_ip_full} successful")
             except Exception as e:
+                print(f"An error occurred when connecting to {source_ip_full}: {e}")
                 row[10].value = "SSH Failed"
                 all_success = False
                 break
 
             for dest_ip in range(int(dest_start.split('.')[-1]), int(dest_end.split('.')[-1]) + 1):
                 dest_ip_full = dest_start.rsplit('.', 1)[0] + '.' + str(dest_ip)
-                result = await test_telnet(dest_ip_full, port)
+                print(f"Testing telnet from {source_ip_full} to {dest_ip_full}:{port}")
+                result = asyncio.run(test_telnet(dest_ip_full, port))
+                print(f"Testing telnet result: {result}")
                 if result == "Failed":
                     all_success = False
 
@@ -52,29 +74,10 @@ async def process_excel(file_name, ssh_port, ssh_user, ssh_password):
 
         row[10].value = "Success" if all_success else "Failed"
 
-    wb.save(file_name)
+    result_filename = os.path.join(temp_dir, "result.xlsx")
+    wb.save(result_filename)
 
-async def handle_upload(request):
-    reader = await request.multipart()
-    field = await reader.next()
-    file_name = field.filename
-    file_path = '/tmp/check/' + file_name
+    return send_file(result_filename, as_attachment=True)
 
-    with open(file_path, 'wb') as f:
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            f.write(chunk)
-
-    # Process the uploaded file
-    await process_excel(file_path, ssh_port=request.headers.get('ssh-port'),
-                       ssh_user=request.headers.get('ssh-user'), ssh_password=request.headers.get('ssh-password'))
-
-    return web.Response(text="File processed successfully")
-
-app = web.Application()
-app.router.add_post('/upload', handle_upload)
-
-if __name__ == '__main__':
-    web.run_app(app)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
